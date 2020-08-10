@@ -49,8 +49,8 @@ def get_transform(train):
         # during training, randomly flip the training images
         # and ground-truth for data augmentation
         # 50%的概率水平翻转
-        transformers.append(transforms.RandomHorizontalFlip(0.5))
         transformers.append(transforms.Crop([800, 150, 1300, 920]))
+        transformers.append(transforms.RandomHorizontalFlip(0.5))
 
     return transforms.Compose(transformers)
 
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # define training and validation data loaders
     # 在jupyter notebook里训练模型时num_workers参数只能为0，不然会报错，这里就把它注释掉了
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=4, shuffle=True, num_workers=0,
+        dataset, batch_size=4, shuffle=True, num_workers=4,
         collate_fn=utils.collate_fn)
 
     # data_loader_test = torch.utils.data.DataLoader(

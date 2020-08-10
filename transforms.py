@@ -60,7 +60,7 @@ class Crop(object):
         boxes[:, 1] = torch.clamp_min(boxes[:, 1], self.bound[1]) - self.bound[1]
         boxes[:, 2] = torch.clamp(boxes[:, 2], self.bound[0], self.bound[2]) - self.bound[0]
         boxes[:, 3] = torch.clamp(boxes[:, 3], self.bound[1], self.bound[3]) - self.bound[1]
-        boxes += 1
+        # boxes += 1
 
         target['area'] = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
         image = image[:, self.bound[1]:self.bound[3], self.bound[0]:self.bound[2]]
