@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "推断",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/infer.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "训练",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/train.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
