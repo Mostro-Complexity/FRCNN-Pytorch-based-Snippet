@@ -12,13 +12,13 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN
 from dataset import MarkDataset
 
 
-def resnet_fpn_backbone(backbone_name, pretrained, backbone_path):
-    if os.path.exists(backbone_path) and pretrained:
+def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
+    if backbone_path is not None and os.path.exists(backbone_path) and pretrained:
         backbone = resnet.__dict__[backbone_name](
             pretrained=False,
             norm_layer=misc_nn_ops.FrozenBatchNorm2d)
         backbone.load_state_dict(torch.load(backbone_path))
-    elif pretrained:
+    else:
         backbone = resnet.__dict__[backbone_name](
             pretrained=pretrained,
             norm_layer=misc_nn_ops.FrozenBatchNorm2d)

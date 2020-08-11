@@ -363,3 +363,4 @@ def showbbox(model, img, device, nms_thres=0.9):
 
     img.show()
     img.save('output/infer.jpg')
+    return img

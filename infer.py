@@ -4,11 +4,13 @@ import torch
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.faster_rcnn import FasterRCNN
 from train import resnet_fpn_backbone
+import argparse
+
 if __name__ == "__main__":
-    num_classes = 2
+    num_classes = 12
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    checkpoint = torch.load(r'checkpoint/checkpoint-epoch50.pth')
+    checkpoint = torch.load(r'checkpoint/checkpoint-epoch23.pth')
     model = fasterrcnn_resnet50_fpn(
         pretrained=False,
         progress=True,
@@ -18,5 +20,8 @@ if __name__ == "__main__":
     model.load_state_dict(checkpoint['state_dict'])
     model.to(device)
 
-    image = Image.open('medicine_data/JPEGImages/2_gaussian.jpg').convert("RGB")
-    showbbox(model, image, device)
+    global_image = Image.open('medicine_data/JPEGImages/2_gaussian.jpg').convert("RGB")
+    image = global_image.crop([800, 150, 1300, 920])
+    image = showbbox(model, image, device)
+    global_image.paste(image, [800, 150, 1300, 920])
+    global_image.show()
