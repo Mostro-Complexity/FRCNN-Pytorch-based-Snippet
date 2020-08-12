@@ -16,7 +16,14 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/train.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "args": [
+                "--image_min_side=400",
+                "--image_max_side=600",
+                "--workers=4",
+                "--epochs=20",
+                "-b=backbone/resnet152-b121ed2d.pth"
+            ]
         }
     ]
 }
