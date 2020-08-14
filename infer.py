@@ -160,9 +160,9 @@ def _infer_from_video():
     while(cap.isOpened()):
         _, frame = cap.read()
         global_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        global_image = detector.from_global_image(global_image, sub_region, nms_thres=0.2)
+        global_image = detector.from_global_image(global_image, sub_region, nms_thres=0.6)
         global_image = global_image.resize(tuple(int(i*0.8) for i in global_image.size))
-        cv2.imshow('image', np.array(global_image))
+        cv2.imshow('image', cv2.cvtColor(np.array(global_image), cv2.COLOR_BGR2RGB))
         k = cv2.waitKey(20)
         # q键退出
         if k & 0xff == ord('q'):
@@ -185,7 +185,7 @@ def _regen_labeled_images():
 
     import cv2
     SUB_REGION = [800, 150, 1300, 920]
-    SAMPLE_INTERVAL = 1000
+    SAMPLE_INTERVAL = 300
     detector = Detector(args)
     cap = cv2.VideoCapture(args.input_path)
     counter = 0
@@ -195,7 +195,7 @@ def _regen_labeled_images():
             break
         if counter % SAMPLE_INTERVAL == 0:
             global_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            detector.save_as_labelme(args.output_dir, global_image, SUB_REGION, nms_thres=0.2)
+            detector.save_as_labelme(args.output_dir, global_image, SUB_REGION, nms_thres=0.6)
         counter += 1
 
     cap.release()
@@ -204,5 +204,5 @@ def _regen_labeled_images():
 
 if __name__ == "__main__":
     # _infer_from_image()
-    # _infer_from_video()
-    _regen_labeled_images()
+    _infer_from_video()
+    # _regen_labeled_images()
