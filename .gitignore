@@ -1,3 +1,5 @@
 medicine_data
 *.pth
 *.pyc
+regen_data
+croped_medicine_data

@@ -50,7 +50,6 @@ def get_transform(train):
         # during training, randomly flip the training images
         # and ground-truth for data augmentation
         # 50%的概率水平翻转
-        transformers.append(transforms.Crop([800, 150, 1300, 920]))
         transformers.append(transforms.RandomHorizontalFlip(0.5))
 
     return transforms.Compose(transformers)
@@ -59,7 +58,7 @@ def get_transform(train):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--backbone_path', type=str, default='./backbone/resnext101_32x8d-8ba56ff5.pth', help='name of backbone model')
-    parser.add_argument('-d', '--dataset_dir', type=str, default='./medicine_data', help='path to data directory')
+    parser.add_argument('-d', '--dataset_dir', type=str, default='./croped_medicine_data', help='path to data directory')
     parser.add_argument('-c', '--checkpoints_dir', type=str, default='./checkpoint', help='path to outputs directory')
     parser.add_argument('--image_min_side', type=int, default=600, help='default: {:d}'.format(600))
     parser.add_argument('--image_max_side', type=int, default=1000, help='default: {:d}'.format(1000))
