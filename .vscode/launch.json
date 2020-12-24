@@ -26,7 +26,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--backbone_path=backbone/resnet152-b121ed2d.pth",
-                "--model_path=checkpoint/checkpoint-epoch200.pth",
+                "--model_path=checkpoint/checkpoint-epoch300.pth",
                 "--num_classes=2",
                 "--input_path=medicine_data/Videos/震元药店收银台_震元药店收银台_20200612094650_20200612123733_.avi"
             ]
@@ -54,9 +54,9 @@
             "args": [
                 "--image_min_side=400",
                 "--image_max_side=600",
-                "--workers=4",
-                "--current_epoch=36",
-                "--epochs=200",
+                "--workers=0",
+                "--current_epoch=201",
+                "--epochs=300",
                 "--num_epochs_to_snapshot=5",
                 "-b=backbone/resnet152-b121ed2d.pth"
             ]

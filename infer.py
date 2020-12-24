@@ -177,7 +177,7 @@ def _regen_labeled_images():
     parser.add_argument('-d', '--dataset_dir', type=str, default='./medicine_data', help='path to data directory')
     parser.add_argument('-m', '--model_path', type=str, default='./checkpoint', help='path to outputs directory')
     parser.add_argument('-i', '--input_path', type=str, required=True, help='path to inputs')
-    parser.add_argument('-o', '--output_dir', type=str, required=True, help='path to outputs directory')
+    parser.add_argument('-o', '--output_dir', type=str, default='./regenerated_data', help='path to outputs directory')
     parser.add_argument('--image_min_side', type=int, default=600, help='default: {:d}'.format(600))
     parser.add_argument('--image_max_side', type=int, default=1000, help='default: {:d}'.format(1000))
     parser.add_argument('--num_classes', type=int, default=4, help='default: {:d}'.format(75))

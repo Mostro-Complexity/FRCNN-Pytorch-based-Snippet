@@ -1,5 +1,6 @@
 medicine_data
 *.pth
 *.pyc
-regen_data
+regenerated_data
 croped_medicine_data
+events.out.tfevents.*

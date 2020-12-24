@@ -126,9 +126,9 @@ if __name__ == "__main__":
     # and a learning rate scheduler
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
 
-    checkpoint_path = os.path.join(args.checkpoints_dir, 'checkpoint-epoch{:d}'.format(args.current_epoch-1))
+    checkpoint_path = os.path.join(args.checkpoints_dir, 'checkpoint-epoch{:d}.pth'.format(args.current_epoch-1))
     if os.path.exists(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location=device)
         optimizer.load_state_dict(checkpoint['optimizer'])
         model.load_state_dict(checkpoint['state_dict'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
