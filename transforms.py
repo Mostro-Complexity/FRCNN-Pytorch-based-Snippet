@@ -1,5 +1,6 @@
 import random
 import torch
+from torch._C import dtype
 
 from torchvision.transforms import functional as F
 
@@ -32,9 +33,12 @@ class RandomHorizontalFlip(object):
         if random.random() < self.prob:
             height, width = image.shape[-2:]
             image = image.flip(-1)
-            bbox = target["boxes"]
-            bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
-            target["boxes"] = bbox
+            if "bbox" in target:
+                bbox = target["bbox"]
+                # assert torch.all(bbox[:, 2:] > bbox[:, :2])
+                bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
+                target["bbox"] = bbox
+
             if "masks" in target:
                 target["masks"] = target["masks"].flip(-1)
             if "keypoints" in target:
@@ -66,3 +70,54 @@ class Crop(object):
         image = image[:, self.bound[1]:self.bound[3], self.bound[0]:self.bound[2]]
         assert torch.all(target['area'] > 0)
         return image, target
+
+
+class AnnotationCollate(object):
+    def __call__(self, image, target):
+        collated_target = {}
+        if len(target) != 0:
+            keys = target[0].keys()
+            for key in keys:
+                _list = [t[key] for t in target if not t['iscrowd']]
+                assert len(_list) != 0
+
+                try:
+                    collated_target[key] = torch.as_tensor(_list)
+                except ValueError:
+                    collated_target[key] = _list
+                except Exception as e:
+                    raise e
+
+        return image, collated_target
+
+
+class BoxesFormatConvert(object):
+    def __call__(self, image, target):
+        try:
+            bbox = target["bbox"]
+            bbox = bbox[torch.all(bbox[:, 2:] > 1e-6, dim=-1)]  # filter illegal labels
+            bbox[:, 2:] += bbox[:, :2]
+            target["bbox"] = bbox
+        except KeyError:
+            pass
+
+        return image, target
+
+
+class ClassConvert(object):
+    def __init__(self, cvt_map, num_intra_list):
+        self.cvt_map = cvt_map
+        self.num_intra_list = num_intra_list
+
+    def __call__(self, image, target):
+        try:
+            category_id = [self.cvt_map[i.item()] for i in target['id']]
+            target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
+        except KeyError:
+            pass
+        except Exception as e:
+            raise e
+        return image, target
+
+    def reverse(self):
+        pass

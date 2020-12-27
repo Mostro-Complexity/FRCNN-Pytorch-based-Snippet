@@ -1,16 +1,16 @@
-import utils
-import transforms
+import transforms as T
 import torch
-import torchvision
+import torch.utils.tensorboard
 import os
 import argparse
+import torchvision.datasets as datasets
+import glob
 from engine import train_one_epoch
-# from engine import train_one_epoch, evaluate
+from lr_scheduler import WarmUpMultiStepLR
 from torchvision.ops import misc as misc_nn_ops
 from torchvision.models import resnet
 from torchvision.models.detection.backbone_utils import BackboneWithFPN
 from torchvision.models.detection.faster_rcnn import FasterRCNN
-from dataset import MarkDataset
 
 
 def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
@@ -42,24 +42,25 @@ def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
     return BackboneWithFPN(backbone, return_layers, in_channels_list, out_channels)
 
 
-def get_transform(train):
-    transformers = []
-    # converts the image, a PIL image, into a PyTorch Tensor
-    transformers.append(transforms.ToTensor())
-    if train:
-        # during training, randomly flip the training images
-        # and ground-truth for data augmentation
-        # 50%的概率水平翻转
-        transformers.append(transforms.Crop([800, 150, 1300, 920]))
-        transformers.append(transforms.RandomHorizontalFlip(0.5))
+def load_classes(path):
+    info_dict = torch.load(path)
+    instance_convert_map = info_dict['convert_array']
+    num_intra_classes = info_dict['num_intra_classes']
+    return instance_convert_map, num_intra_classes
 
-    return transforms.Compose(transformers)
+
+def collate_fn_coco(batch):
+    image, target = tuple(zip(*batch))
+    for t in target:
+        t['boxes'] = t['bbox'] if 'bbox' in t else torch.empty(0, 4)
+        t['labels'] = t['category_id'] if 'category_id' in t else torch.empty(0, dtype=torch.int64)
+    return image, target
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--backbone_path', type=str, default='./backbone/resnext101_32x8d-8ba56ff5.pth', help='name of backbone model')
-    parser.add_argument('-d', '--dataset_dir', type=str, default='./medicine_data', help='path to data directory')
+    parser.add_argument('-d', '--dataset_dir', type=str, default='./data', help='path to data directory')
     parser.add_argument('-c', '--checkpoints_dir', type=str, default='./checkpoint', help='path to outputs directory')
     parser.add_argument('--image_min_side', type=int, default=600, help='default: {:d}'.format(600))
     parser.add_argument('--image_max_side', type=int, default=1000, help='default: {:d}'.format(1000))
@@ -69,6 +70,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=0.0005, help='default: {:g}'.format(0.0005))
     parser.add_argument('--num_steps_to_display', type=int, default=20, help='default: {:d}'.format(20))
     parser.add_argument('--num_epochs_to_snapshot', type=int, default=1, help='default: {:d}'.format(1))
+    parser.add_argument('--num_checkpoints_to_reserve', type=int, default=10, help='default: {:d}'.format(10))
     parser.add_argument('--epochs', type=int, default=100, help='default: {:d}'.format(100))
     parser.add_argument('--current_epoch', type=int, default=1, help='default: {:d}'.format(1))
     parser.add_argument('--workers', type=int, default=4, help='default: {:d}'.format(4))
@@ -77,23 +79,30 @@ if __name__ == "__main__":
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # use our dataset and defined transformations
-    dataset = MarkDataset(args.dataset_dir, get_transform(train=True))
-    dataset_test = MarkDataset(args.dataset_dir, get_transform(train=False))
+    # load classes (including background)
+    instance_convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
 
-    # including background
-    num_classes = len(dataset.labels_cvtmap)
+    # define coco dataset
+    coco_det = datasets.CocoDetection(
+        os.path.join(args.dataset_dir, 'train2017'),
+        os.path.join(args.dataset_dir, 'annotations', 'instances_train2017.json'),
+        transforms=T.Compose([
+            T.AnnotationCollate(),
+            T.BoxesFormatConvert(),
+            T.ClassConvert(instance_convert_map, num_intra_classes),
+            T.ToTensor(),
+            T.RandomHorizontalFlip(0.5)
+        ])
+    )
 
-    # split the dataset in train and test set
-    # 我的数据集一共有492张图，差不多训练验证4:1
-    # indices = torch.randperm(len(dataset)).tolist()
-    # dataset = torch.utils.data.Subset(dataset, indices[:-100])
-    # dataset_test = torch.utils.data.Subset(dataset_test, indices[-100:])
+    # define coco sampler
+    sampler = torch.utils.data.RandomSampler(coco_det)
+    batch_sampler = torch.utils.data.BatchSampler(sampler, args.batch_size, drop_last=True)
 
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers,
-        collate_fn=utils.collate_fn)
+        coco_det, batch_sampler=batch_sampler, num_workers=args.workers,
+        collate_fn=collate_fn_coco)
 
     # data_loader_test = torch.utils.data.DataLoader(
     #     dataset_test, batch_size=2, shuffle=False,  # num_workers=4,
@@ -112,7 +121,8 @@ if __name__ == "__main__":
             backbone_name,
             pretrained=False
         )
-    model = FasterRCNN(backbone, num_classes, min_size=args.image_min_side, max_size=args.image_max_side)
+    # number of categories includes background
+    model = FasterRCNN(backbone, num_intra_classes.sum().item() + 1, min_size=args.image_min_side, max_size=args.image_max_side)
     # move model to the right device
     model.to(device)
 
@@ -124,9 +134,12 @@ if __name__ == "__main__":
                                 momentum=args.momentum, weight_decay=args.weight_decay)
 
     # and a learning rate scheduler
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
+    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[50, 70], gamma=0.1,
+                                     factor=0.3333, num_iters=5)
+    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
+    summary_writer = torch.utils.tensorboard.SummaryWriter('logs')
 
-    checkpoint_path = os.path.join(args.checkpoints_dir, 'checkpoint-epoch{:d}.pth'.format(args.current_epoch-1))
+    checkpoint_path = os.path.join(args.checkpoints_dir, 'checkpoint-epoch{:04d}.pth'.format(args.current_epoch-1))
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=device)
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -139,7 +152,11 @@ if __name__ == "__main__":
     for epoch in range(args.current_epoch, args.epochs+1):
         model.train()
         # train for one epoch, printing every 10 iterations
-        train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=50)
+        train_one_epoch(
+            model, optimizer, data_loader, device, epoch, 
+            print_freq=args.num_steps_to_display,
+            summary_writer=summary_writer
+        )
 
         # update the learning rate
         lr_scheduler.step()
@@ -148,12 +165,17 @@ if __name__ == "__main__":
         # evaluate(model, data_loader_test, device=device)
 
         if epoch % args.num_epochs_to_snapshot == 0:
+            os.makedirs('checkpoint', exist_ok=True)
+            ckpts_path = glob.glob('checkpoint/*.pth')
+            if len(ckpts_path) > args.num_checkpoints_to_reserve:
+                for path in ckpts_path[:len(ckpts_path)-args.num_checkpoints_to_reserve]:
+                    os.remove(path)
             checkpoint = {
                 'epoch': epoch,
                 'optimizer': optimizer.state_dict(),
                 'state_dict': model.state_dict(),
                 'lr_scheduler': lr_scheduler.state_dict()
             }
-            torch.save(checkpoint, "checkpoint/checkpoint-epoch{:d}.pth".format(epoch))
+            torch.save(checkpoint, "checkpoint/checkpoint-epoch{:04d}.pth".format(epoch))
 
     print("That's it!")

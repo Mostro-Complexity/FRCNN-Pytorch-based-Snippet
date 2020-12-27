@@ -5,18 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "重新生成标签",
+            "name": "聚类产生intra classes",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/infer.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--backbone_path=backbone/resnet152-b121ed2d.pth",
-                "--model_path=checkpoint/checkpoint-epoch71.pth",
-                "--num_classes=2",
-                "--input_path=medicine_data/Videos/震元药店收银台_震元药店收银台_20200612094650_20200612123733_.avi",
-                "--output_dir=regenerated_data"
-            ]
+            "program": "${workspaceRoot}/intra_classes_clustering.py",
+            "console": "integratedTerminal"
         },
         {
             "name": "推断",
@@ -42,7 +35,8 @@
                 "--image_max_side=600",
                 "--workers=4",
                 "--epochs=100",
-                "-b=backbone/resnet152-b121ed2d.pth"
+                "--num_steps_to_display=500",
+                "-b=backbone/resnet50-19c8e357.pth"
             ]
         },
         {
