@@ -90,6 +90,14 @@ class AnnotationCollate(object):
 
         return image, collated_target
 
+    @staticmethod
+    def reverse(target):
+        assert len(target) != 0
+        reversed = [{
+            k: v[i] for k, v in target.items()
+        } for i in range(target.values()[0].size(0))]
+        return reversed
+
 
 class BoxesFormatConvert(object):
     def __call__(self, image, target):
@@ -119,5 +127,46 @@ class ClassConvert(object):
             raise e
         return image, target
 
-    def reverse(self):
-        pass
+    @staticmethod
+    def reverse(target, num_intra_list, cat_ids=None):
+        """Use after collate annotation
+
+        Parameters
+        ----------
+        target : Dict
+            Annotation after collating
+        num_intra_list : List[int]
+            Numbers of each intra class
+        cat_ids : List[int], optional
+            Dict used to convert cat ids to coco cat ids, by default None
+
+        Returns
+        -------
+        Dict
+            class indices start from 1
+        """
+        if isinstance(target, dict):
+            if len(target) == 0:
+                return target
+            labels = target['labels']
+            for i, label in enumerate(labels):  # label start from 1
+                for j, num_intra in enumerate(num_intra_list):
+                    if label <= num_intra:
+                        break
+                    label -= num_intra
+                if cat_ids:
+                    labels[i] = cat_ids[j]
+                else:
+                    labels[i] = j + 1  # class indices start from 1
+            target['labels'] = labels
+        elif isinstance(target, int):
+            label = target
+            for j, num_intra in enumerate(num_intra_list):
+                if label <= num_intra:
+                    break
+                label -= num_intra
+            if cat_ids:
+                target = cat_ids[j]
+            else:
+                target = j + 1  # class indices start from 1
+        return target

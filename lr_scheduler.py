@@ -19,4 +19,4 @@ class WarmUpMultiStepLR(MultiStepLR):
         else:
             factor = 1
 
-        return [lr * factor for lr in self.base_lr]
+        return [lr * factor for lr in super(WarmUpMultiStepLR, self).get_lr()]

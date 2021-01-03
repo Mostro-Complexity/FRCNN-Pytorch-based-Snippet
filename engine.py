@@ -4,6 +4,7 @@ import time
 import torch
 
 import torchvision.models.detection.mask_rcnn
+from pycocotools.cocoeval import COCOeval
 
 
 import utils
@@ -74,7 +75,6 @@ def _get_iou_types(model):
 
 @torch.no_grad()
 def evaluate(model, data_loader, device):
-    from coco_utils import get_coco_api_from_dataset
     from coco_eval import CocoEvaluator
 
     n_threads = torch.get_num_threads()
@@ -85,7 +85,7 @@ def evaluate(model, data_loader, device):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    coco = get_coco_api_from_dataset(data_loader.dataset)
+    coco = data_loader.dataset.coco
     iou_types = _get_iou_types(model)
     coco_evaluator = CocoEvaluator(coco, iou_types)
 
@@ -100,10 +100,7 @@ def evaluate(model, data_loader, device):
         model_time = time.time() - model_time
 
         res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
-        evaluator_time = time.time()
-        coco_evaluator.update(res)
-        evaluator_time = time.time() - evaluator_time
-        metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
+        metric_logger.update(model_time=model_time)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()

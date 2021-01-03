@@ -134,7 +134,7 @@ if __name__ == "__main__":
                                 momentum=args.momentum, weight_decay=args.weight_decay)
 
     # and a learning rate scheduler
-    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[50, 70], gamma=0.1,
+    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[10, 15], gamma=0.1,
                                      factor=0.3333, num_iters=5)
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
     summary_writer = torch.utils.tensorboard.SummaryWriter('logs')
