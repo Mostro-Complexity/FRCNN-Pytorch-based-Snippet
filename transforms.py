@@ -113,14 +113,19 @@ class BoxesFormatConvert(object):
 
 
 class ClassConvert(object):
-    def __init__(self, cvt_map, num_intra_list):
+    def __init__(self, cvt_map, num_intra_list=None):
         self.cvt_map = cvt_map
         self.num_intra_list = num_intra_list
 
     def __call__(self, image, target):
         try:
-            category_id = [self.cvt_map[i.item()] for i in target['id']]
-            target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
+            if self.num_intra_list:
+                category_id = [self.cvt_map[i.item()] for i in target['id']]
+                target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
+            else:
+                category_id = [self.cvt_map[i.item()] for i in target['category_id']]
+                target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
+                
         except KeyError:
             pass
         except Exception as e:

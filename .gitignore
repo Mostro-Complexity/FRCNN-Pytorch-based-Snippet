@@ -1,6 +1,7 @@
 medicine_data
 *.pth
 *.pyc
+*.zip
 regenerated_data
 croped_medicine_data
 events.out.tfevents.*

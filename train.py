@@ -74,13 +74,33 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100, help='default: {:d}'.format(100))
     parser.add_argument('--current_epoch', type=int, default=1, help='default: {:d}'.format(1))
     parser.add_argument('--workers', type=int, default=4, help='default: {:d}'.format(4))
+    parser.add_argument('--intra_class', action='store_true')
+    parser.add_argument('--dataset_name', type=str, default='coco2017', help='default: {:s}'.format('coco2017'))
     args = parser.parse_args()
 
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # load classes (including background)
-    instance_convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
+    if args.intra_class:
+        instance_convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
+        class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
+        num_categories = num_intra_classes.sum().item() + 1
+    elif args.dataset_name == 'coco2017':
+        convert_map = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 13, 14, 15, 16, 17, 18, 19, 20,
+            21, 22, 23, 24, 25, 27, 28, 31, 32,
+            33, 34, 35, 36, 37, 38, 39, 40, 41,
+            42, 43, 44, 46, 47, 48, 49, 50, 51,
+            52, 53, 54, 55, 56, 57, 58, 59, 60,
+            61, 62, 63, 64, 65, 67, 70, 72, 73,
+            74, 75, 76, 77, 78, 79, 80, 81, 82,
+            84, 85, 86, 87, 88, 89, 90
+        ]
+        convert_map = {c: i+1 for i, c in enumerate(convert_map)}
+        class_convert = T.ClassConvert(convert_map)
+        num_categories = len(convert_map) + 1
 
     # define coco dataset
     coco_det = datasets.CocoDetection(
@@ -89,7 +109,7 @@ if __name__ == "__main__":
         transforms=T.Compose([
             T.AnnotationCollate(),
             T.BoxesFormatConvert(),
-            T.ClassConvert(instance_convert_map, num_intra_classes),
+            class_convert,
             T.ToTensor(),
             T.RandomHorizontalFlip(0.5)
         ])
@@ -122,7 +142,7 @@ if __name__ == "__main__":
             pretrained=False
         )
     # number of categories includes background
-    model = FasterRCNN(backbone, num_intra_classes.sum().item() + 1, min_size=args.image_min_side, max_size=args.image_max_side)
+    model = FasterRCNN(backbone, num_categories, min_size=args.image_min_side, max_size=args.image_max_side)
     # move model to the right device
     model.to(device)
 
@@ -153,7 +173,7 @@ if __name__ == "__main__":
         model.train()
         # train for one epoch, printing every 10 iterations
         train_one_epoch(
-            model, optimizer, data_loader, device, epoch, 
+            model, optimizer, data_loader, device, epoch,
             print_freq=args.num_steps_to_display,
             summary_writer=summary_writer
         )
@@ -166,7 +186,7 @@ if __name__ == "__main__":
 
         if epoch % args.num_epochs_to_snapshot == 0:
             os.makedirs('checkpoint', exist_ok=True)
-            ckpts_path = glob.glob('checkpoint/*.pth')
+            ckpts_path = glob.glob('checkpoint/checkpoint-epoch*.pth')
             if len(ckpts_path) > args.num_checkpoints_to_reserve:
                 for path in ckpts_path[:len(ckpts_path)-args.num_checkpoints_to_reserve]:
                     os.remove(path)
