@@ -3,13 +3,14 @@ import os
 
 import numpy as np
 import torch
+import glob
 from PIL import Image, ImageDraw
-from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.faster_rcnn import FasterRCNN
 from torchvision.transforms import functional as TF
+import torchvision.datasets as datasets
 
-from train import resnet_fpn_backbone
-from utils import showbbox
+from train import resnet_fpn_backbone, load_classes
+from transforms import ClassConvert
 import json
 
 
@@ -18,19 +19,19 @@ class Detector(object):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.num_classes = args.num_classes
         self.checkpoint = torch.load(args.model_path, map_location=self.device)
-
+        self.num_intra_classes = args.num_intra_classes
         backbone_name = os.path.basename(args.backbone_path).split('-')[0]
         backbone = resnet_fpn_backbone(
             backbone_name,
             pretrained=False
         )
-        self.model = FasterRCNN(backbone, args.num_classes, min_size=args.image_min_side, max_size=args.image_max_side)
+        self.categories = args.categories
+        self.model = FasterRCNN(backbone, args.num_classes + 1, min_size=args.image_min_side, max_size=args.image_max_side)
 
+        # number of categories includes background
         self.model.load_state_dict(self.checkpoint['state_dict'])
         self.model.to(self.device)
 
-        label_path = os.path.join(args.dataset_dir, 'labels.txt')
-        self.load_labels(label_path)
         self._index = 1
 
     def detect(self, PIL_image, nms_thres=0.9):
@@ -67,20 +68,21 @@ class Detector(object):
 
         return global_scores, global_boxes, global_labels
 
-    def from_global_image(self, global_image, sub_region, nms_thres=0.9):
-        image = global_image.crop(sub_region)
-        scores, boxes, labels = self.detect(image, nms_thres)
-        draw = ImageDraw.Draw(image)
+    def from_global_image(self, global_image, nms_thres=0.9):
+        scores, boxes, labels = self.detect(global_image, nms_thres)
+        draw = ImageDraw.Draw(global_image)
 
-        for box in boxes:
+        for score, box, label in zip(scores, boxes, labels):
             xmin = round(box[0].item())
             ymin = round(box[1].item())
             xmax = round(box[2].item())
             ymax = round(box[3].item())
-
+            category_id = ClassConvert.reverse(label.item(), self.num_intra_classes)
+            category = self.categories[category_id-1]
+            category_name = category['name']
             draw.rectangle(((xmin, ymin), (xmax, ymax)), outline='blue')
+            draw.text((xmin, ymin), text=f'{category_name:s} {score.item():.3f}', fill='blue')
 
-        global_image.paste(image, sub_region)
         return global_image
 
     def save_as_labelme(self, output_dir, global_image, sub_region, nms_thres=0.9):
@@ -133,13 +135,34 @@ class Detector(object):
 
 
 def _infer_from_image():
-    num_classes = 12
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--backbone_path', type=str, default='./backbone/resnext101_32x8d-8ba56ff5.pth', help='name of backbone model')
+    parser.add_argument('-m', '--model_path', type=str, default='./checkpoint', help='path to outputs directory')
+    parser.add_argument('-i', '--input_dir', type=str, required=True, help='inputs directory')
+    parser.add_argument('-o', '--output_dir', type=str, required=True, help='outputs directory')
+    parser.add_argument('-d', '--dataset_dir', type=str, default='./data', help='path to data directory')
+    parser.add_argument('--image_min_side', type=int, default=600, help='default: {:d}'.format(600))
+    parser.add_argument('--image_max_side', type=int, default=1000, help='default: {:d}'.format(1000))
+    args = parser.parse_args()
 
-    detector = Detector(r'checkpoint/checkpoint-epoch23.pth', num_classes)
+    # load classes (including background)
+    _, num_intra_classes = load_classes('data/intra_classes.pth')
+    args.num_classes = num_intra_classes.sum().item()
+    args.num_intra_classes = num_intra_classes
 
-    global_image = Image.open('medicine_data/JPEGImages/2_gaussian.jpg').convert("RGB")
-    global_image = detector.from_global_image(global_image, [800, 150, 1300, 920])
-    global_image.show()
+    # define coco dataset
+    coco_det = datasets.CocoDetection(
+        os.path.join(args.dataset_dir, 'train2017'),
+        os.path.join(args.dataset_dir, 'annotations', 'instances_train2017.json')
+    )
+    args.categories = coco_det.coco.loadCats(coco_det.coco.getCatIds())
+
+    detector = Detector(args)
+
+    for path in glob.glob(os.path.join(args.input_dir, '*.jpg')):
+        global_image = Image.open(path).convert("RGB")
+        global_image = detector.from_global_image(global_image, nms_thres=0.8)
+        global_image.save(os.path.join(args.output_dir, os.path.basename(path)))
 
 
 def _infer_from_video():
@@ -203,6 +226,6 @@ def _regen_labeled_images():
 
 
 if __name__ == "__main__":
-    # _infer_from_image()
-    _infer_from_video()
+    _infer_from_image()
+    # _infer_from_video()
     # _regen_labeled_images()
