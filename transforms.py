@@ -119,13 +119,13 @@ class ClassConvert(object):
 
     def __call__(self, image, target):
         try:
-            if self.num_intra_list:
+            if self.num_intra_list is not None:
                 category_id = [self.cvt_map[i.item()] for i in target['id']]
                 target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
             else:
                 category_id = [self.cvt_map[i.item()] for i in target['category_id']]
                 target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
-                
+
         except KeyError:
             pass
         except Exception as e:
@@ -133,23 +133,7 @@ class ClassConvert(object):
         return image, target
 
     @staticmethod
-    def reverse(target, num_intra_list, cat_ids=None):
-        """Use after collate annotation
-
-        Parameters
-        ----------
-        target : Dict
-            Annotation after collating
-        num_intra_list : List[int]
-            Numbers of each intra class
-        cat_ids : List[int], optional
-            Dict used to convert cat ids to coco cat ids, by default None
-
-        Returns
-        -------
-        Dict
-            class indices start from 1
-        """
+    def _reverse_intra_classes(target, num_intra_list, cat_ids=None):
         if isinstance(target, dict):
             if len(target) == 0:
                 return target
@@ -175,3 +159,40 @@ class ClassConvert(object):
             else:
                 target = j + 1  # class indices start from 1
         return target
+
+    @staticmethod
+    def _reverse_original_classes(target, cat_ids):
+        assert cat_ids is not None, "cat_ids can't be None when using original category"
+        if isinstance(target, dict):
+            if len(target) == 0:
+                return target
+            labels = target['labels']
+            for i, label in enumerate(labels):  # label start from 1
+                labels[i] = cat_ids[label-1]
+            target['labels'] = labels
+        elif isinstance(target, int):
+            target = cat_ids[target-1]  # class indices start from 1
+        return target
+
+    @staticmethod
+    def reverse(target, num_intra_list, cat_ids=None):
+        """Use after collate annotation
+
+        Parameters
+        ----------
+        target : Dict
+            Annotation after collating
+        num_intra_list : List[int]
+            Numbers of each intra class
+        cat_ids : List[int], optional
+            Dict used to convert cat ids to coco cat ids, by default None
+
+        Returns
+        -------
+        Dict
+            class indices start from 1
+        """
+        if num_intra_list is not None:
+            return ClassConvert._reverse_intra_classes(target, num_intra_list, cat_ids)
+        else:
+            return ClassConvert._reverse_original_classes(target, cat_ids)

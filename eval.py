@@ -16,7 +16,7 @@ from transforms import ClassConvert
 
 
 @torch.no_grad()
-def evaluate(model, data_loader, num_intra_classes, device):
+def evaluate(model, data_loader, device, num_intra_classes=None):
 
     # n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
@@ -182,13 +182,11 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=8, help='default: {:g}'.format(8))
     parser.add_argument('--num_steps_to_display', type=int, default=20, help='default: {:d}'.format(20))
     parser.add_argument('--workers', type=int, default=4, help='default: {:d}'.format(4))
+    parser.add_argument('--intra_class', action='store_true')
     args = parser.parse_args()
 
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-    # load classes (including background)
-    instance_convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
 
     # define coco dataset
     coco_det = datasets.CocoDetection(
@@ -196,6 +194,14 @@ if __name__ == "__main__":
         os.path.join(args.dataset_dir, 'annotations', 'instances_val2017.json'),
         transforms=T.Compose([T.ToTensor()])
     )
+
+    # load classes (including background)
+    if args.intra_class:
+        convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
+        num_categories = num_intra_classes.sum().item() + 1
+    else:
+        convert_map, num_intra_classes = coco_det.coco.getCatIds(), None
+        num_categories = len(convert_map) + 1
 
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
@@ -220,7 +226,7 @@ if __name__ == "__main__":
             pretrained=False
         )
     # number of categories includes background
-    model = FasterRCNN(backbone, num_intra_classes.sum().item() + 1, min_size=args.image_min_side, max_size=args.image_max_side)
+    model = FasterRCNN(backbone, num_categories, min_size=args.image_min_side, max_size=args.image_max_side)
     # move model to the right device
     model.to(device)
 
@@ -234,4 +240,4 @@ if __name__ == "__main__":
 
     model.eval()
     # evaluate on the test dataset
-    evaluate(model, data_loader, num_intra_classes, device=device)
+    evaluate(model, data_loader, num_intra_classes=num_intra_classes, device=device)
