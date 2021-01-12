@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
     # load classes (including background)
     if args.intra_class:
-        convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
+        convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
         num_categories = num_intra_classes.sum().item() + 1
     else:
         convert_map, num_intra_classes = coco_det.coco.getCatIds(), None

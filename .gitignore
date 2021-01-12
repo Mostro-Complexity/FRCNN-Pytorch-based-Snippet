@@ -6,6 +6,7 @@ regenerated_data
 croped_medicine_data
 events.out.tfevents.*
 
+results.json
 data
 backbone
 outputs

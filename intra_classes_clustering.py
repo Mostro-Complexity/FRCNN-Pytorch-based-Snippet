@@ -3,8 +3,8 @@ import torch
 from sklearn.cluster import KMeans
 
 coco_det = datasets.CocoDetection(
-    'data/train2017',
-    'data/annotations/instances_train2017.json')
+    'data/COCO2017/train2017',
+    'data/COCO2017/annotations/instances_train2017.json')
 
 num_classes = len(coco_det.coco.getCatIds())
 num_children = torch.as_tensor([2]*num_classes)  # 每个类别内的子类别个数
@@ -29,4 +29,4 @@ for idx, anns_ids in enumerate(cwise_anns_ids):
     # 保存每个标签对应的子类别
     ann_cat_map.update({k: v for k, v in zip(anns_ids, generated_classes)})
 
-torch.save({'convert_array': ann_cat_map, 'num_intra_classes': num_children}, 'data/intra_classes.pth')
+torch.save({'convert_array': ann_cat_map, 'num_intra_classes': num_children}, 'data/COCO2017/intra_classes.pth')

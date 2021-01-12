@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     # load classes (including background)
     if args.intra_class:
-        instance_convert_map, num_intra_classes = load_classes('data/intra_classes.pth')
+        instance_convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
         class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
         num_categories = num_intra_classes.sum().item() + 1
     elif args.dataset_name == 'coco2017':
@@ -154,7 +154,7 @@ if __name__ == "__main__":
                                 momentum=args.momentum, weight_decay=args.weight_decay)
 
     # and a learning rate scheduler
-    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[10, 15], gamma=0.1,
+    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[6, 8], gamma=0.1,
                                      factor=0.3333, num_iters=5)
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
     summary_writer = torch.utils.tensorboard.SummaryWriter('logs')

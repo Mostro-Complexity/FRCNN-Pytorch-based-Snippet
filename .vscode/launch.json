@@ -12,15 +12,17 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "推断",
+            "name": "推断（使用聚类标签）",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/infer.py",
             "console": "integratedTerminal",
             "args": [
+                "--image_min_side=400",
+                "--image_max_side=600",
                 "--backbone_path=backbone/resnet50-19c8e357.pth",
-                "--model_path=checkpoint/checkpoint-epoch0005.pth",
-                "--input_dir=data/test2017",
+                "--model_path=checkpoint/checkpoint-intra-class.pth",
+                "--input_dir=data/COCO2017/test2017",
                 "--output_dir=outputs"
             ]
         },
@@ -33,12 +35,13 @@
             "args": [
                 "--image_min_side=400",
                 "--image_max_side=600",
-                "--current_epoch=17",
+                // "--current_epoch=17",
                 "--learning_rate=0.001",
                 "--workers=4",
-                "--epochs=25",
+                "--epochs=10",
                 "--num_steps_to_display=500",
                 "-b=backbone/resnet50-19c8e357.pth",
+                "-d=data/COCO2017",
                 "--intra_class"
             ]
         },
@@ -51,15 +54,16 @@
             "args": [
                 "--image_min_side=400",
                 "--image_max_side=600",
-                "--learning_rate=0.01",
+                "--learning_rate=0.001",
                 "--workers=4",
                 "--epochs=10",
                 "--num_steps_to_display=500",
-                "-b=backbone/resnet50-19c8e357.pth"
+                "-b=backbone/resnet50-19c8e357.pth",
+                "-d=data/COCO2017"
             ]
         },
         {
-            "name": "评估",
+            "name": "评估（使用聚类标签）",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/eval.py",
@@ -69,7 +73,24 @@
                 "--image_min_side=400",
                 "--image_max_side=600",
                 "--backbone_path=backbone/resnet50-19c8e357.pth",
-                "--model_path=checkpoint/checkpoint-epoch0017.pth",
+                "--model_path=checkpoint/checkpoint-epoch0009.pth",
+                "-d=data/COCO2017",
+                "--intra_class"
+            ]
+        },
+        {
+            "name": "评估（使用原始标签）",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/eval.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--workers=8",
+                "--image_min_side=400",
+                "--image_max_side=600",
+                "--backbone_path=backbone/resnet50-19c8e357.pth",
+                "--model_path=checkpoint/checkpoint-original-class.pth",
+                "-d=data/COCO2017"
             ]
         }
     ]
