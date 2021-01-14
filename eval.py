@@ -8,15 +8,13 @@ import time
 import utils
 import json
 from pycocotools.cocoeval import COCOeval
-from torchvision.ops import misc as misc_nn_ops
-from torchvision.models import resnet
-from torchvision.models.detection.backbone_utils import BackboneWithFPN
 from torchvision.models.detection.faster_rcnn import FasterRCNN
 from transforms import ClassConvert
+from train import load_classes, resnet_fpn_backbone
 
 
 @torch.no_grad()
-def evaluate(model, data_loader, device, num_intra_classes=None):
+def evaluate_on_coco(model, data_loader, device, args):
 
     # n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
@@ -24,11 +22,9 @@ def evaluate(model, data_loader, device, num_intra_classes=None):
     cpu_device = torch.device("cpu")
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Test:'
-    cat_ids = data_loader.dataset.coco.getCatIds()
 
     results = []
-    for images, targets in metric_logger.log_every(data_loader, 100, header):
+    for images, targets in metric_logger.log_every(data_loader, 100, 'Test:'):
         images = list(img.to(device) for img in images)
 
         torch.cuda.synchronize()
@@ -41,8 +37,8 @@ def evaluate(model, data_loader, device, num_intra_classes=None):
         for output, target in zip(outputs, targets):
             if len(target) == 0:
                 continue
-            output = ClassConvert.reverse(output, num_intra_classes, cat_ids)
-            results.extend(generate_outputs(
+            output = ClassConvert.reverse(output, args.num_intra_classes, args.category_ids)
+            results.extend(generate_coco_predictions(
                 target[0]['image_id'],  # has to be a scalar
                 output['boxes'].tolist(),
                 output['labels'].tolist(),
@@ -62,37 +58,71 @@ def evaluate(model, data_loader, device, num_intra_classes=None):
     cocoEval.accumulate()
     cocoEval.summarize()
 
-    show_pr_curves(cocoEval)
-
-# def evaluate(self, image_ids: List[str], bboxes: List[List[float]], classes: List[int], probs: List[float]) -> Tuple[float, str]:
-#     generate_ground_truth(, image_ids, bboxes, classes, probs)
-
-#     annType = 'bbox'
-#     path_to_coco_dir = os.path.join(self._path_to_data_dir, 'COCO')
-#     path_to_annotations_dir = os.path.join(path_to_coco_dir, 'annotations')
-#     path_to_annotation = os.path.join(path_to_annotations_dir, 'instances_val2017.json')
-
-#     cocoDt = generate_ground_truth()
-
-#     cocoEval = COCOeval(cocoGt, cocoDt, annType)
-#     cocoEval.evaluate()
-#     cocoEval.accumulate()
-
-#     original_stdout = sys.stdout
-#     string_stdout = StringIO()
-#     sys.stdout = string_stdout
-#     cocoEval.summarize()
-#     sys.stdout = original_stdout
-
-#     mean_ap = cocoEval.stats[0].item()  # stats[0] records AP@[0.5:0.95]
-#     detail = string_stdout.getvalue()
-
-#     self._show_pr_curves(cocoEval)
-
-#     return mean_ap, detail
+    show_coco_pr_curves(cocoEval)
 
 
-def show_pr_curves(coco_eval):
+@torch.no_grad()
+def evaluate_on_voc(model, data_loader, device, args):
+    # n_threads = torch.get_num_threads()
+    # FIXME remove this and make paste_masks_in_image run on the GPU
+    # torch.set_num_threads(1)
+    cpu_device = torch.device("cpu")
+    model.eval()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+
+    cwise_predictions = [[] for _ in range(len(args.num_intra_classes))]
+
+    for images, targets in metric_logger.log_every(data_loader, 100, 'Test:'):
+        images = list(img.to(device) for img in images)
+
+        torch.cuda.synchronize()
+        model_time = time.time()
+        outputs = model(images)
+
+        outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
+        model_time = time.time() - model_time
+
+        for output, target in zip(outputs, targets):
+            if len(target) == 0:
+                continue
+
+            output = ClassConvert.reverse(output, args.num_intra_classes)
+            generate_voc_predictions(
+                cwise_predictions,
+                target['annotation']['filename'][:6],
+                output['boxes'].tolist(),
+                output['labels'].tolist(),
+                output['scores'].tolist()
+            )
+        metric_logger.update(model_time=model_time)
+
+    os.makedirs('voc_gt', exist_ok=True)
+    for cid, predictions in enumerate(cwise_predictions):
+        with open('voc_gt/{:s}.txt'.format(args.category_ids[cid]), 'w') as f:
+            f.writelines(['{:s} {:f} {:f} {:f} {:f} {:f}\n'.format(*p) for p in predictions])
+            f.close()
+    # gather the stats from all processes
+    metric_logger.synchronize_between_processes()
+    print("Averaged stats:", metric_logger)
+
+    mAP = []
+    # 计算每个类别的AP
+    for cid in range(len(args.num_intra_classes)):
+        class_name = args.category_ids[cid] 
+        rec, prec, ap = utils.voc_eval(
+            'voc_gt/{}.txt',
+            'data/VOC/VOCdevkit/VOC2007/Annotations/{}.xml',
+            'data/VOC/VOCdevkit/VOC2007/ImageSets/Main/val.txt',
+            class_name, './'
+        )
+        print("{} :\t {} ".format(class_name, ap))
+        mAP.append(ap)
+
+    # 输出总的mAP
+    print("mAP :\t {}".format(float(sum(mAP)/len(mAP))))
+
+
+def show_coco_pr_curves(coco_eval):
     import matplotlib.pyplot as plt
     import numpy as np
     pr_array1 = coco_eval.eval['precision'][0, :, 0, 0, 2]
@@ -113,7 +143,14 @@ def show_pr_curves(coco_eval):
     plt.show()
 
 
-def generate_outputs(image_id, bboxes, classes, probs):
+def generate_voc_predictions(cwise_predictions, image_id, bboxes, classes, probs):
+    for bbox, cls, prob in zip(bboxes, classes, probs):
+        line_data = [image_id, prob]
+        line_data.extend(bbox)
+        cwise_predictions[cls-1].append(line_data)
+
+
+def generate_coco_predictions(image_id, bboxes, classes, probs):
     results = [
         {
             'image_id': int(image_id),  # COCO evaluation requires `image_id` to be type `int`
@@ -132,40 +169,58 @@ def generate_outputs(image_id, bboxes, classes, probs):
     return results
 
 
-def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
-    if backbone_path is not None and os.path.exists(backbone_path) and pretrained:
-        backbone = resnet.__dict__[backbone_name](
-            pretrained=False,
-            norm_layer=misc_nn_ops.FrozenBatchNorm2d)
-        backbone.load_state_dict(torch.load(backbone_path))
+def load_coco_data(args):
+    # define coco dataset
+    dataset = datasets.CocoDetection(
+        os.path.join(args.dataset_dir, 'val2017'),
+        os.path.join(args.dataset_dir, 'annotations', 'instances_val2017.json'),
+        transforms=T.Compose([T.ToTensor()])
+    )
+
+    # load classes (including background)
+    if args.intra_class:
+        convert_map, args.num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+        args.num_categories = args.num_intra_classes.sum().item() + 1
     else:
-        backbone = resnet.__dict__[backbone_name](
-            pretrained=pretrained,
-            norm_layer=misc_nn_ops.FrozenBatchNorm2d)
+        convert_map, args.num_intra_classes = dataset.coco.getCatIds(), None
+        args.num_categories = len(convert_map) + 1
 
-    # freeze layers
-    for name, parameter in backbone.named_parameters():
-        if 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
-            parameter.requires_grad_(False)
+    # define training and validation data loaders
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False,
+        collate_fn=collate_fn_coco)
 
-    return_layers = {'layer1': '0', 'layer2': '1', 'layer3': '2', 'layer4': '3'}
+    args.category_ids = data_loader.dataset.coco.getCatIds()
 
-    in_channels_stage2 = backbone.inplanes // 8
-    in_channels_list = [
-        in_channels_stage2,
-        in_channels_stage2 * 2,
-        in_channels_stage2 * 4,
-        in_channels_stage2 * 8,
-    ]
-    out_channels = 256
-    return BackboneWithFPN(backbone, return_layers, in_channels_list, out_channels)
+    return data_loader
 
 
-def load_classes(path):
-    info_dict = torch.load(path)
-    instance_convert_map = info_dict['convert_array']
-    num_intra_classes = info_dict['num_intra_classes']
-    return instance_convert_map, num_intra_classes
+def load_voc_data(args):
+    # define voc dataset
+    dataset = datasets.VOCDetection(
+        args.dataset_dir,
+        year='2007',
+        image_set='val',
+        transforms=T.Compose([T.ToTensor()])
+    )
+
+    # load classes (including background)
+    if args.intra_class:
+        convert_map, args.num_intra_classes, _, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+        args.num_categories = sum(args.num_intra_classes) + 1
+    else:
+        _, _, _, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+        convert_map, args.num_intra_classes = dataset.coco.getCatIds(), None
+        args.num_categories = len(convert_map) + 1
+
+    args.category_ids = list(category_ids.keys())
+
+    # define training and validation data loaders
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False,
+        collate_fn=collate_fn_coco)
+
+    return data_loader
 
 
 def collate_fn_coco(batch):
@@ -183,34 +238,16 @@ if __name__ == "__main__":
     parser.add_argument('--num_steps_to_display', type=int, default=20, help='default: {:d}'.format(20))
     parser.add_argument('--workers', type=int, default=4, help='default: {:d}'.format(4))
     parser.add_argument('--intra_class', action='store_true')
+    parser.add_argument('--dataset_name', type=str, default='coco2017', help='default: {:s}'.format('coco2017'))
     args = parser.parse_args()
 
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # define coco dataset
-    coco_det = datasets.CocoDetection(
-        os.path.join(args.dataset_dir, 'val2017'),
-        os.path.join(args.dataset_dir, 'annotations', 'instances_val2017.json'),
-        transforms=T.Compose([T.ToTensor()])
-    )
-
-    # load classes (including background)
-    if args.intra_class:
-        convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
-        num_categories = num_intra_classes.sum().item() + 1
-    else:
-        convert_map, num_intra_classes = coco_det.coco.getCatIds(), None
-        num_categories = len(convert_map) + 1
-
-    # define training and validation data loaders
-    data_loader = torch.utils.data.DataLoader(
-        coco_det, batch_size=args.batch_size, num_workers=args.workers, shuffle=False,
-        collate_fn=collate_fn_coco)
-
-    # data_loader_test = torch.utils.data.DataLoader(
-    #     dataset_test, batch_size=2, shuffle=False,  # num_workers=4,
-    #     collate_fn=utils.collate_fn)
+    if args.dataset_name == 'coco2017':
+        data_loader = load_coco_data(args)
+    elif 'VOC' in args.dataset_name.upper():
+        data_loader = load_voc_data(args)
 
     # get the model using our helper function
     backbone_name = os.path.basename(args.backbone_path).split('-')[0]
@@ -226,7 +263,7 @@ if __name__ == "__main__":
             pretrained=False
         )
     # number of categories includes background
-    model = FasterRCNN(backbone, num_categories, min_size=args.image_min_side, max_size=args.image_max_side)
+    model = FasterRCNN(backbone, args.num_categories, min_size=args.image_min_side, max_size=args.image_max_side)
     # move model to the right device
     model.to(device)
 
@@ -238,6 +275,8 @@ if __name__ == "__main__":
     else:
         print('{:s} does not exist.'.format(checkpoint_path))
 
-    model.eval()
     # evaluate on the test dataset
-    evaluate(model, data_loader, num_intra_classes=num_intra_classes, device=device)
+    if args.dataset_name == 'coco2017':
+        evaluate_on_coco(model, data_loader, device, args)
+    elif 'VOC' in args.dataset_name.upper():
+        evaluate_on_voc(model, data_loader, device, args)

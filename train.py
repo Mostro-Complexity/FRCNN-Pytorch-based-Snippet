@@ -44,9 +44,7 @@ def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
 
 def load_classes(path):
     info_dict = torch.load(path)
-    instance_convert_map = info_dict['convert_array']
-    num_intra_classes = info_dict['num_intra_classes']
-    return instance_convert_map, num_intra_classes
+    return info_dict.values()
 
 
 def collate_fn_coco(batch):
@@ -54,6 +52,14 @@ def collate_fn_coco(batch):
     for t in target:
         t['boxes'] = t['bbox'] if 'bbox' in t else torch.empty(0, 4)
         t['labels'] = t['category_id'] if 'category_id' in t else torch.empty(0, dtype=torch.int64)
+    return image, target
+
+
+def collate_fn_voc(batch):
+    image, target = tuple(zip(*batch))
+    for t in target:
+        t['boxes'] = t['bndbox']
+        t['labels'] = t['category_id'] 
     return image, target
 
 
@@ -83,9 +89,38 @@ if __name__ == "__main__":
 
     # load classes (including background)
     if args.intra_class:
-        instance_convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
-        class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
-        num_categories = num_intra_classes.sum().item() + 1
+        if args.dataset_name == 'coco2017':
+            instance_convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+            class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
+            num_categories = num_intra_classes.sum().item() + 1
+            # define coco dataset
+            dataset = datasets.CocoDetection(
+                os.path.join(args.dataset_dir, 'train2017'),
+                os.path.join(args.dataset_dir, 'annotations', 'instances_train2017.json'),
+                transforms=T.Compose([
+                    T.COCOAnnotationCollate(),
+                    T.BoxesFormatConvert(),
+                    class_convert,
+                    T.ToTensor(),
+                    T.RandomHorizontalFlip(0.5)
+                ])
+            )
+        elif 'VOC' in args.dataset_name.upper():
+            instance_convert_map, num_intra_classes, secondary_index, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+            class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
+            num_categories = num_intra_classes.sum().item() + 1
+            # define VOC dataset
+            dataset = datasets.VOCDetection(
+                args.dataset_dir,
+                year='2007',
+                image_set='train',
+                transforms=T.Compose([
+                    T.VOCAnnotationCollate(secondary_index, category_ids),
+                    class_convert,
+                    T.ToTensor(),
+                    T.RandomHorizontalFlip(0.5)
+                ])
+            )
     elif args.dataset_name == 'coco2017':
         convert_map = [
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
@@ -102,27 +137,14 @@ if __name__ == "__main__":
         class_convert = T.ClassConvert(convert_map)
         num_categories = len(convert_map) + 1
 
-    # define coco dataset
-    coco_det = datasets.CocoDetection(
-        os.path.join(args.dataset_dir, 'train2017'),
-        os.path.join(args.dataset_dir, 'annotations', 'instances_train2017.json'),
-        transforms=T.Compose([
-            T.AnnotationCollate(),
-            T.BoxesFormatConvert(),
-            class_convert,
-            T.ToTensor(),
-            T.RandomHorizontalFlip(0.5)
-        ])
-    )
-
-    # define coco sampler
-    sampler = torch.utils.data.RandomSampler(coco_det)
+    # define sampler
+    sampler = torch.utils.data.RandomSampler(dataset)
     batch_sampler = torch.utils.data.BatchSampler(sampler, args.batch_size, drop_last=True)
 
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
-        coco_det, batch_sampler=batch_sampler, num_workers=args.workers,
-        collate_fn=collate_fn_coco)
+        dataset, batch_sampler=batch_sampler, num_workers=args.workers,
+        collate_fn=collate_fn_voc)
 
     # data_loader_test = torch.utils.data.DataLoader(
     #     dataset_test, batch_size=2, shuffle=False,  # num_workers=4,
@@ -154,7 +176,7 @@ if __name__ == "__main__":
                                 momentum=args.momentum, weight_decay=args.weight_decay)
 
     # and a learning rate scheduler
-    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[6, 8], gamma=0.1,
+    lr_scheduler = WarmUpMultiStepLR(optimizer, milestones=[60, 80], gamma=0.1,
                                      factor=0.3333, num_iters=5)
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)
     summary_writer = torch.utils.tensorboard.SummaryWriter('logs')

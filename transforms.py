@@ -1,3 +1,4 @@
+from os import truncate
 import random
 import torch
 from torch._C import dtype
@@ -72,7 +73,7 @@ class Crop(object):
         return image, target
 
 
-class AnnotationCollate(object):
+class COCOAnnotationCollate(object):
     def __call__(self, image, target):
         collated_target = {}
         if len(target) != 0:
@@ -87,6 +88,53 @@ class AnnotationCollate(object):
                     collated_target[key] = _list
                 except Exception as e:
                     raise e
+
+        return image, collated_target
+
+    @staticmethod
+    def reverse(target):
+        assert len(target) != 0
+        reversed = [{
+            k: v[i] for k, v in target.items()
+        } for i in range(target.values()[0].size(0))]
+        return reversed
+
+
+class VOCAnnotationCollate(object):
+    def __init__(self, secondary_index, category_ids):
+        self.secondary_index = secondary_index
+        self.category_ids = category_ids
+
+    def __call__(self, image, target):
+        filename = target['annotation']['filename'].replace('.jpg', '.xml')
+        target = target['annotation']['object']
+        collated_target = {}
+        if len(target) != 0:
+            keys = target[0].keys()
+            for key in keys:
+                if key in ['truncated', 'diffcult']:
+                    _list = [int(t[key]) for t in target]
+                elif key == 'bndbox':
+                    _list = [[
+                        int(t[key]['xmin']), int(t[key]['ymin']),
+                        int(t[key]['xmax']), int(t[key]['ymax'])
+                    ] for t in target]
+                elif key == 'part':
+                    continue
+                else:
+                    _list = [t[key] for t in target]
+                assert len(_list) != 0
+
+                try:
+                    collated_target[key] = torch.as_tensor(_list)
+                except ValueError:
+                    collated_target[key] = _list
+                except Exception as e:
+                    raise e
+
+            collated_target['filename'] = [filename]*len(_list)
+            collated_target['id'] = torch.as_tensor([self.secondary_index[filename][i] for i in range(len(_list))])
+            # collated_target['labels'] = torch.as_tensor([self.category_ids[name] for name in collated_target['name']])
 
         return image, collated_target
 
@@ -120,10 +168,10 @@ class ClassConvert(object):
     def __call__(self, image, target):
         try:
             if self.num_intra_list is not None:
-                category_id = [self.cvt_map[i.item()] for i in target['id']]
+                category_id = [self.cvt_map[i.item()] for i in target['id']]  # ann id to cat id
                 target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
             else:
-                category_id = [self.cvt_map[i.item()] for i in target['category_id']]
+                category_id = [self.cvt_map[i.item()] for i in target['category_id']]  # cat id to cat id
                 target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
 
         except KeyError:
