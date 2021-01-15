@@ -68,9 +68,27 @@
                 "--dataset_name=voc2007",
                 "--intra_class"
             ]
+        }, {
+            "name": "训练（使用VOC原始标签）",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/train.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--image_min_side=400",
+                "--image_max_side=600",
+                // "--current_epoch=17",
+                "--learning_rate=0.001",
+                "--workers=4",
+                "--epochs=100",
+                "--num_steps_to_display=500",
+                "-b=backbone/resnet50-19c8e357.pth",
+                "-d=data/VOC",
+                "--dataset_name=voc2007"
+            ]
         },
         {
-            "name": "训练（使用原始标签）",
+            "name": "训练（使用COCO原始标签）",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/train.py",
@@ -133,6 +151,22 @@
                 "--model_path=checkpoint/checkpoint-original-class.pth",
                 "-d=data/COCO2017"
             ]
-        }
+        },
+        {
+            "name": "评估（使用VOC原始标签）",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/eval.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--workers=8",
+                "--image_min_side=400",
+                "--image_max_side=600",
+                "--backbone_path=backbone/resnet50-19c8e357.pth",
+                "--model_path=checkpoint/checkpoint-original-class.pth",
+                "-d=data/VOC",
+                "--dataset_name=voc2007"
+            ]
+        },
     ]
 }

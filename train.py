@@ -59,7 +59,7 @@ def collate_fn_voc(batch):
     image, target = tuple(zip(*batch))
     for t in target:
         t['boxes'] = t['bndbox']
-        t['labels'] = t['category_id'] 
+        t['labels'] = t['category_id']
     return image, target
 
 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
                 year='2007',
                 image_set='train',
                 transforms=T.Compose([
-                    T.VOCAnnotationCollate(secondary_index, category_ids),
+                    T.VOCAnnotationCollate(secondary_index),
                     class_convert,
                     T.ToTensor(),
                     T.RandomHorizontalFlip(0.5)
@@ -136,7 +136,23 @@ if __name__ == "__main__":
         convert_map = {c: i+1 for i, c in enumerate(convert_map)}
         class_convert = T.ClassConvert(convert_map)
         num_categories = len(convert_map) + 1
-
+    elif 'VOC' in args.dataset_name.upper():
+        # instance_convert_map, num_intra_classes, secondary_index, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+        # class_convert = T.ClassConvert(instance_convert_map, num_intra_classes)  # number of categories includes background
+        _, _, secondary_index, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
+        num_categories = len(category_ids) + 1
+        # define VOC dataset
+        dataset = datasets.VOCDetection(
+            args.dataset_dir,
+            year='2007',
+            image_set='train',
+            transforms=T.Compose([
+                T.VOCAnnotationCollate(secondary_index),
+                T.CategoryToLabeledClasses(category_ids),
+                T.ToTensor(),
+                T.RandomHorizontalFlip(0.5)
+            ])
+        )
     # define sampler
     sampler = torch.utils.data.RandomSampler(dataset)
     batch_sampler = torch.utils.data.BatchSampler(sampler, args.batch_size, drop_last=True)

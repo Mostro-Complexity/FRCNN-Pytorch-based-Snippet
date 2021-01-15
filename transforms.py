@@ -101,9 +101,8 @@ class COCOAnnotationCollate(object):
 
 
 class VOCAnnotationCollate(object):
-    def __init__(self, secondary_index, category_ids):
+    def __init__(self, secondary_index):
         self.secondary_index = secondary_index
-        self.category_ids = category_ids
 
     def __call__(self, image, target):
         filename = target['annotation']['filename'].replace('.jpg', '.xml')
@@ -134,7 +133,6 @@ class VOCAnnotationCollate(object):
 
             collated_target['filename'] = [filename]*len(_list)
             collated_target['id'] = torch.as_tensor([self.secondary_index[filename][i] for i in range(len(_list))])
-            # collated_target['labels'] = torch.as_tensor([self.category_ids[name] for name in collated_target['name']])
 
         return image, collated_target
 
@@ -244,3 +242,18 @@ class ClassConvert(object):
             return ClassConvert._reverse_intra_classes(target, num_intra_list, cat_ids)
         else:
             return ClassConvert._reverse_original_classes(target, cat_ids)
+
+class CategoryToLabeledClasses(object):
+    def __init__(self, cvt_map):
+        self.cvt_map = cvt_map
+
+    def __call__(self, image, target):
+        try:
+            category_id = [self.cvt_map[i] for i in target['name']]  # ann id to cat id
+            target['category_id'] = torch.as_tensor(category_id, dtype=torch.int64)
+
+        except KeyError:
+            pass
+        except Exception as e:
+            raise e
+        return image, target

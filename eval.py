@@ -7,7 +7,6 @@ import torchvision.datasets as datasets
 import time
 import utils
 import json
-from pycocotools.cocoeval import COCOeval
 from torchvision.models.detection.faster_rcnn import FasterRCNN
 from transforms import ClassConvert
 from train import load_classes, resnet_fpn_backbone
@@ -15,6 +14,7 @@ from train import load_classes, resnet_fpn_backbone
 
 @torch.no_grad()
 def evaluate_on_coco(model, data_loader, device, args):
+    from pycocotools.cocoeval import COCOeval
 
     # n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
@@ -70,7 +70,7 @@ def evaluate_on_voc(model, data_loader, device, args):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
 
-    cwise_predictions = [[] for _ in range(len(args.num_intra_classes))]
+    cwise_predictions = [[] for _ in range(len(args.category_ids))]
 
     for images, targets in metric_logger.log_every(data_loader, 100, 'Test:'):
         images = list(img.to(device) for img in images)
@@ -85,8 +85,9 @@ def evaluate_on_voc(model, data_loader, device, args):
         for output, target in zip(outputs, targets):
             if len(target) == 0:
                 continue
-
-            output = ClassConvert.reverse(output, args.num_intra_classes)
+            
+            if args.num_intra_classes is not None:
+                output = ClassConvert.reverse(output, args.num_intra_classes)
             generate_voc_predictions(
                 cwise_predictions,
                 target['annotation']['filename'][:6],
@@ -107,7 +108,7 @@ def evaluate_on_voc(model, data_loader, device, args):
 
     mAP = []
     # 计算每个类别的AP
-    for cid in range(len(args.num_intra_classes)):
+    for cid in range(len(args.category_ids)):
         class_name = args.category_ids[cid] 
         rec, prec, ap = utils.voc_eval(
             'voc_gt/{}.txt',
@@ -210,8 +211,8 @@ def load_voc_data(args):
         args.num_categories = sum(args.num_intra_classes) + 1
     else:
         _, _, _, category_ids = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))
-        convert_map, args.num_intra_classes = dataset.coco.getCatIds(), None
-        args.num_categories = len(convert_map) + 1
+        args.num_intra_classes = None
+        args.num_categories = len(category_ids) + 1
 
     args.category_ids = list(category_ids.keys())
 
