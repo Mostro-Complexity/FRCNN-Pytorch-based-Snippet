@@ -7,6 +7,7 @@ import torchvision.datasets as datasets
 import time
 import utils
 import json
+import matplotlib.pyplot as plt
 from torchvision.models.detection.faster_rcnn import FasterRCNN
 from transforms import ClassConvert
 from train import load_classes, resnet_fpn_backbone
@@ -85,7 +86,7 @@ def evaluate_on_voc(model, data_loader, device, args):
         for output, target in zip(outputs, targets):
             if len(target) == 0:
                 continue
-            
+
             if args.num_intra_classes is not None:
                 output = ClassConvert.reverse(output, args.num_intra_classes)
             generate_voc_predictions(
@@ -106,25 +107,28 @@ def evaluate_on_voc(model, data_loader, device, args):
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
 
-    mAP = []
+    mAP, recall, precision, iou_thresh = [], [], [], 0.5
     # 计算每个类别的AP
     for cid in range(len(args.category_ids)):
-        class_name = args.category_ids[cid] 
+        class_name = args.category_ids[cid]
         rec, prec, ap = utils.voc_eval(
             'voc_gt/{}.txt',
             'data/VOC/VOCdevkit/VOC2007/Annotations/{}.xml',
             'data/VOC/VOCdevkit/VOC2007/ImageSets/Main/val.txt',
-            class_name, './'
+            class_name, './', iou_thresh
         )
+        recall.append(rec)
+        precision.append(prec)
         print("{} :\t {} ".format(class_name, ap))
         mAP.append(ap)
 
+    recall, precision = torch.as_tensor(rec), torch.as_tensor(prec)
     # 输出总的mAP
     print("mAP :\t {}".format(float(sum(mAP)/len(mAP))))
+    show_voc_pr_curves(recall, precision, iou_thresh)
 
 
 def show_coco_pr_curves(coco_eval):
-    import matplotlib.pyplot as plt
     import numpy as np
     pr_array1 = coco_eval.eval['precision'][0, :, 0, 0, 2]
     pr_array2 = coco_eval.eval['precision'][2, :, 0, 0, 2]
@@ -168,6 +172,15 @@ def generate_coco_predictions(image_id, bboxes, classes, probs):
     ]
 
     return results
+
+
+def show_voc_pr_curves(recall, precision, iou_thresh=0.5):
+    plt.xlabel('recall')
+    plt.ylabel('precision')
+    plt.grid()
+    plt.plot(recall.numpy(), precision.numpy(), 'b-', label='IoU={:f}'.format(iou_thresh))
+    plt.legend(loc='lower left')
+    plt.show()
 
 
 def load_coco_data(args):
