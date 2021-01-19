@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: 当前文件",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "聚类产生intra classes（VOC数据集）",
             "type": "python",
             "request": "launch",
@@ -16,7 +23,7 @@
             ]
         },
         {
-            "name": "推断（使用聚类标签）",
+            "name": "推断（使用COCO聚类标签）",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/infer.py",
@@ -60,7 +67,7 @@
                 "--image_max_side=600",
                 // "--current_epoch=17",
                 "--learning_rate=0.001",
-                "--workers=4",
+                "--workers=0",
                 "--epochs=100",
                 "--num_steps_to_display=500",
                 "-b=backbone/resnet50-19c8e357.pth",
@@ -68,7 +75,8 @@
                 "--dataset_name=voc2007",
                 "--intra_class"
             ]
-        }, {
+        },
+        {
             "name": "训练（使用VOC原始标签）",
             "type": "python",
             "request": "launch",
