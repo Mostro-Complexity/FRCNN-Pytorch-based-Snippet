@@ -15,6 +15,19 @@ from train import load_classes, resnet_fpn_backbone
 
 @torch.no_grad()
 def evaluate_on_coco(model, data_loader, device, args):
+    """使用coco数据集评估
+
+    Parameters
+    ----------
+    model : Module
+        用于评估的模型
+    data_loader : Dataloader
+        用于读取验证集的Dataloader
+    device : Device
+        所使用的设备
+    args : 
+        命令行参数
+    """
     from pycocotools.cocoeval import COCOeval
 
     # n_threads = torch.get_num_threads()
@@ -64,6 +77,19 @@ def evaluate_on_coco(model, data_loader, device, args):
 
 @torch.no_grad()
 def evaluate_on_voc(model, data_loader, device, args):
+    """使用voc数据集评估
+
+    Parameters
+    ----------
+    model : Module
+        用于评估的模型
+    data_loader : Dataloader
+        用于读取验证集的Dataloader
+    device : Device
+        所使用的设备
+    args : 
+        命令行参数
+    """
     # n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
     # torch.set_num_threads(1)
@@ -129,6 +155,13 @@ def evaluate_on_voc(model, data_loader, device, args):
 
 
 def show_coco_pr_curves(coco_eval):
+    """显示PR曲线
+
+    Parameters
+    ----------
+    coco_eval : COCOEVAL
+        coco数据集的验证结果
+    """
     import numpy as np
     pr_array1 = coco_eval.eval['precision'][0, :, 0, 0, 2]
     pr_array2 = coco_eval.eval['precision'][2, :, 0, 0, 2]
@@ -149,6 +182,21 @@ def show_coco_pr_curves(coco_eval):
 
 
 def generate_voc_predictions(cwise_predictions, image_id, bboxes, classes, probs):
+    """生成voc的GT
+
+    Parameters
+    ----------
+    cwise_predictions : List
+        按类划分的预测结果
+    image_id : int
+        图片ID
+    bboxes : List
+        图片中的预测框
+    classes : List
+        图片预测框中的类别
+    probs : List
+        图片预测框的后验概率
+    """
     for bbox, cls, prob in zip(bboxes, classes, probs):
         line_data = [image_id, prob]
         line_data.extend(bbox)
@@ -156,6 +204,19 @@ def generate_voc_predictions(cwise_predictions, image_id, bboxes, classes, probs
 
 
 def generate_coco_predictions(image_id, bboxes, classes, probs):
+    """生成COCO的GT
+
+    Parameters
+    ----------
+    image_id : int
+        图片ID
+    bboxes : List
+        图片中的预测框
+    classes : List
+        图片预测框中的类别
+    probs : List
+        图片预测框的后验概率
+    """
     results = [
         {
             'image_id': int(image_id),  # COCO evaluation requires `image_id` to be type `int`
@@ -175,6 +236,8 @@ def generate_coco_predictions(image_id, bboxes, classes, probs):
 
 
 def show_voc_pr_curves(recall, precision, iou_thresh=0.5):
+    """显示PR曲线
+    """
     plt.xlabel('recall')
     plt.ylabel('precision')
     plt.grid()
@@ -184,6 +247,18 @@ def show_voc_pr_curves(recall, precision, iou_thresh=0.5):
 
 
 def load_coco_data(args):
+    """读取COCO数据集
+
+    Parameters
+    ----------
+    args : 
+        命令行数据
+
+    Returns
+    -------
+    Dataloader
+        读取数据的Dataloader
+    """
     # define coco dataset
     dataset = datasets.CocoDetection(
         os.path.join(args.dataset_dir, 'val2017'),
@@ -202,7 +277,7 @@ def load_coco_data(args):
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False,
-        collate_fn=collate_fn_coco)
+        collate_fn=collate_fn)
 
     args.category_ids = data_loader.dataset.coco.getCatIds()
 
@@ -210,6 +285,18 @@ def load_coco_data(args):
 
 
 def load_voc_data(args):
+    """读取VOC数据集
+
+    Parameters
+    ----------
+    args : 
+        命令行数据
+
+    Returns
+    -------
+    Dataloader
+        读取数据的Dataloader
+    """
     # define voc dataset
     dataset = datasets.VOCDetection(
         args.dataset_dir,
@@ -232,12 +319,12 @@ def load_voc_data(args):
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False,
-        collate_fn=collate_fn_coco)
+        collate_fn=collate_fn)
 
     return data_loader
 
 
-def collate_fn_coco(batch):
+def collate_fn(batch):
     return tuple(zip(*batch))
 
 

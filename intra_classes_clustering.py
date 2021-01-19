@@ -67,7 +67,7 @@ def voc_class_process(args):
     ann_cat_map, secondary_index, category_ids = {}, {}, {}
     num_children = np.asarray([2]*len(categories_txt_paths))  # 每个类别内的子类别个数
 
-    ann_id=0# 为每个标签创建索引
+    ann_id = 0  # 为每个标签创建索引
     for cid, categories_txt_path in enumerate(categories_txt_paths):
         category, _ = os.path.basename(categories_txt_path).split('_')
         lines = open(categories_txt_path, 'r').readlines()
@@ -78,7 +78,7 @@ def voc_class_process(args):
 
         ann_paths = [os.path.join(args.dataset_dir, 'VOCdevkit', args.dataset_name.upper(), 'Annotations', '{}.xml').format(_id) for _id in img_ids[validities]]
 
-        cwise_anns = []  
+        cwise_anns = []
         for ann_path in ann_paths:
             if os.path.basename(ann_path) not in secondary_index:
                 secondary_index[os.path.basename(ann_path)] = {}
@@ -95,6 +95,7 @@ def voc_class_process(args):
         ratios = np.asarray([ann['ratio'] for ann in cwise_anns])
         ann_ids = np.asarray([ann['id'] for ann in cwise_anns])
         # 子类别
+        assert len(ratios) >= 2,'{:s} 类别的样本数目少于2，请检查数据集'.format(category)
         intra_classes = KMeans(n_clusters=2).fit_predict(ratios.reshape(-1, 1))
         generated_classes = intra_classes + num_children[:cid].sum() + 1  # intra class indices start from 1
         # 保存每个标签对应的子类别

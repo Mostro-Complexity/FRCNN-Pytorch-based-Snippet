@@ -14,6 +14,22 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN
 
 
 def resnet_fpn_backbone(backbone_name, pretrained, backbone_path=None):
+    """更改backbone的读取策略
+
+    Parameters
+    ----------
+    backbone_name : str
+        backbone的名字
+    pretrained : bool
+        是否使用预训练模型
+    backbone_path : str, optional
+        存储backbone的位置, by default None
+
+    Returns
+    -------
+    Module
+        模型
+    """
     if backbone_path is not None and os.path.exists(backbone_path) and pretrained:
         backbone = resnet.__dict__[backbone_name](
             pretrained=False,
@@ -87,7 +103,7 @@ if __name__ == "__main__":
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # load classes (including background)
+    # load dataset 
     if args.intra_class:
         if args.dataset_name == 'coco2017':
             instance_convert_map, num_intra_classes = load_classes(os.path.join(args.dataset_dir, 'intra_classes.pth'))

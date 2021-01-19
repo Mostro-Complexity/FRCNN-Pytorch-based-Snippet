@@ -74,6 +74,8 @@ class Crop(object):
 
 
 class COCOAnnotationCollate(object):
+    """整合coco数据集中的字段，用于训练
+    """
     def __call__(self, image, target):
         collated_target = {}
         if len(target) != 0:
@@ -101,6 +103,8 @@ class COCOAnnotationCollate(object):
 
 
 class VOCAnnotationCollate(object):
+    """整合voc数据集中的字段，用于训练
+    """
     def __init__(self, secondary_index):
         self.secondary_index = secondary_index
 
@@ -146,6 +150,8 @@ class VOCAnnotationCollate(object):
 
 
 class BoxesFormatConvert(object):
+    """x,y,w,h转换为left,top,right,bottom
+    """
     def __call__(self, image, target):
         try:
             bbox = target["bbox"]
@@ -159,6 +165,8 @@ class BoxesFormatConvert(object):
 
 
 class ClassConvert(object):
+    """将每个标签转换为对应的子类别，或是将类别ID做转换（连续数组）
+    """
     def __init__(self, cvt_map, num_intra_list=None):
         self.cvt_map = cvt_map
         self.num_intra_list = num_intra_list
@@ -244,6 +252,8 @@ class ClassConvert(object):
             return ClassConvert._reverse_original_classes(target, cat_ids)
 
 class CategoryToLabeledClasses(object):
+    """类别转换为ID（连续数组）
+    """
     def __init__(self, cvt_map):
         self.cvt_map = cvt_map
 
